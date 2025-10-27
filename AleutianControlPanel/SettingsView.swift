@@ -1,5 +1,5 @@
 //
-//  Item.swift
+//  SettingsView.swift
 //  AleutianControlPanel
 //
 //  Created by Jin on 10/26/25.
@@ -14,14 +14,23 @@
 // NOTE: This work is subject to additional terms under AGPL v3 Section 7.
 // See the NOTICE.txt file for details regarding AI system attribution.
 
-import Foundation
-import SwiftData
+import SwiftUI
 
-@Model
-final class Item {
-    var timestamp: Date
-    
-    init(timestamp: Date) {
-        self.timestamp = timestamp
+struct SettingsView: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Aleutian Preferences")
+                .font(.largeTitle)
+            
+            Form {
+                Toggle("Launch at login", isOn: .constant(false))
+                TextField("Aleutian Binary Path:", text: .constant("/opt/homebrew/bin/aleutian"))
+            }
+            .padding()
+            
+            Text("More settings will go here.")
+        }
+        .padding()
+        .frame(minWidth: 450, minHeight: 250)
     }
 }

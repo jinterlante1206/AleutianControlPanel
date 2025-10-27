@@ -20,13 +20,13 @@ import Combine
 @MainActor
 class LogStreamer: ObservableObject {
     @Published var logText: String = ""
-    let serviceName: String
+    let containerName: String
     private var process: Process?
     private var outputPipe: Pipe?
     
-    init(serviceName: String) {
-        self.serviceName = serviceName
-        self.logText = "Starting log stream for \(serviceName)...\n\n"
+    init(containerName: String) {
+        self.containerName = containerName
+        self.logText = "Starting log stream for \(containerName)...\n\n"
         startStreaming()
     }
     
@@ -37,8 +37,7 @@ class LogStreamer: ObservableObject {
         process?.executableURL = URL(fileURLWithPath: "/bin/zsh")
             
         // Build the command string
-        let commandString = "aleutian stack logs \"\(serviceName)\"" // Added quotes for safety
-        
+        let commandString = "podman logs --timestamps -f \"\(containerName)\""
         // Setup the PATH
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"

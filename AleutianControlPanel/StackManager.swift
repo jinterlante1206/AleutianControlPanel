@@ -127,16 +127,16 @@ class StackManager: ObservableObject {
         }
     }
     
-    func openStats(for serviceName: String) {
+    func openStats(for containerName: String) {
         // open a new terminal to continuously stream stats
-        let cmd = "podman stats \(serviceName)"
+        let cmd = "podman stats \(containerName)"
         
         // tell the terminal to run the command
         let script = """
             tell application "Terminal"
                 activate
                 do script "\(cmd)"
-            end tell
+            
         """
         var error: NSDictionary?
         if let scriptObject = NSAppleScript(source: script) {
@@ -314,32 +314,32 @@ class StackManager: ObservableObject {
         return CommandResult(stdout: resultStdout, stderr: resultStderr, exitCode: exitCode)
     }
     
-    func streamLogs(for serviceName: String) {
-        if let existingWindow = openLogWindows[serviceName] {
+    func streamLogs(for containerName: String) {
+        if let existingWindow = openLogWindows[containerName] {
             existingWindow.makeKeyAndOrderFront(nil)
             return
         }
         
-        let streamer = LogStreamer(serviceName: serviceName)
-        activeStreamers[serviceName] = streamer
+        let streamer = LogStreamer(containerName: containerName)
+        activeStreamers[containerName] = streamer
         
         let logView = LogWindowView(streamer: streamer)
         
         let hostingController = NSHostingController(rootView: logView)
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Logs: \(serviceName)"
+        window.title = "Logs: \(containerName)"
         window.isReleasedWhenClosed = false
         
         let delegate = WindowDelegate { [weak self] in
-            self?.openLogWindows.removeValue(forKey: serviceName)
-            self?.windowDelegates.removeValue(forKey: serviceName)
-            self?.activeStreamers[serviceName]?.stopStreaming()
-            self?.activeStreamers.removeValue(forKey: serviceName)
+            self?.openLogWindows.removeValue(forKey: containerName)
+            self?.windowDelegates.removeValue(forKey: containerName)
+            self?.activeStreamers[containerName]?.stopStreaming()
+            self?.activeStreamers.removeValue(forKey: containerName)
         }
         window.delegate = delegate
         
-        self.openLogWindows[serviceName] = window
-        self.windowDelegates[serviceName] = delegate
+        self.openLogWindows[containerName] = window
+        self.windowDelegates[containerName] = delegate
         
         window.makeKeyAndOrderFront(nil)
     }

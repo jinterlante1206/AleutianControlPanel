@@ -261,22 +261,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
          }
 
          for service in services {
-             let title = service.Names.first ?? "Unknown"
+             let containerName = service.Names.first ?? "Unknown"
+            if service.State == "running" || service.State.contains("starting") {
+                let logsItem = NSMenuItem(title: "View Logs: \(containerName)", action: #selector(viewLogsClicked(_:)), keyEquivalent: "")
+                logsItem.target = self
+                logsItem.representedObject = containerName
+                submenu.addItem(logsItem)
 
-             // Only add log/stat options for services that are likely running or starting
-             if service.State == "running" || service.State.contains("starting") {
-                 let logsItem = NSMenuItem(title: "View Logs: \(title)", action: #selector(viewLogsClicked(_:)), keyEquivalent: "")
-                 logsItem.target = self
-                 logsItem.representedObject = title // Store service name
-                 submenu.addItem(logsItem)
+                let statsItem = NSMenuItem(title: "View Stats: \(containerName)", action: #selector(viewStatsClicked(_:)), keyEquivalent: "")
+                statsItem.target = self
+                statsItem.representedObject = containerName // <-- Store the CONTAINER name
+                submenu.addItem(statsItem)
 
-                 let statsItem = NSMenuItem(title: "View Stats: \(title)", action: #selector(viewStatsClicked(_:)), keyEquivalent: "")
-                 statsItem.target = self
-                 statsItem.representedObject = title // Store service name
-                 submenu.addItem(statsItem)
-
-                 submenu.addItem(NSMenuItem.separator())
-             }
+                submenu.addItem(NSMenuItem.separator())
+            }
          }
          // Remove last separator if it exists
          if !submenu.items.isEmpty && submenu.items.last?.isSeparatorItem == true {
@@ -326,17 +324,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
      }
 
      @objc func viewLogsClicked(_ sender: NSMenuItem) {
-         if let serviceName = sender.representedObject as? String {
-             print("DEBUG: View Logs clicked for \(serviceName).")
-             stackManager.streamLogs(for: serviceName)
-         }
+         if let serviceTitle = sender.representedObject as? String {
+              // Find the corresponding PodmanContainer
+              if let container = stackManager.services.first(where: { $0.Names.first == serviceTitle }) {
+                  print("DEBUG: View Logs clicked for service '\(serviceTitle)', container ID '\(container.id)'.")
+                  // Pass the container ID (which is derived from Names.first)
+                  stackManager.streamLogs(for: container.id)
+              } else {
+                  print("ERROR: Could not find container details for service \(serviceTitle)")
+              }
+          }
      }
 
      @objc func viewStatsClicked(_ sender: NSMenuItem) {
-         if let serviceName = sender.representedObject as? String {
-             print("DEBUG: View Stats clicked for \(serviceName).")
-             stackManager.openStats(for: serviceName)
-         }
+         if let containerName = sender.representedObject as? String {
+               print("DEBUG: View Stats clicked for container '\(containerName)'.")
+               stackManager.openStats(for: containerName)
+           }
      }
 
      // Optional: NSMenuDelegate method

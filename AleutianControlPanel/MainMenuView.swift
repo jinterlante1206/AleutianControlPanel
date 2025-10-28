@@ -19,66 +19,43 @@ import SwiftUI
 
 struct MainMenuView: View {
     @EnvironmentObject var stackManager: StackManager
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // --- Ensure the cases are INSIDE the switch ---
             switch stackManager.stackStatus {
             case .stopped:
                 HeaderView(icon: "icon-stopped", status: "Stack stopped")
-                // FIX: Use MenuButton
                 MenuButton(title: "Start aleutian stack") {
                     stackManager.startStack()
                 }
             case .starting:
                 HeaderView(icon: "icon-starting", status: "Stack starting up")
-                // FIX: Use MenuButton (already correct)
-                MenuButton(title: "starting", disabled: true) {}
+                MenuButton(title: "Starting...", disabled: true) {} // Corrected title
             case .running:
                 HeaderView(icon: "icon-running", status: "Stack running")
-                // FIX: Use MenuButton
                 MenuButton(title: "Stop aleutian stack") {
                     stackManager.stopStack()
                 }
             case .error(let msg):
                 HeaderView(icon: "icon-error", status: "Error")
-                Text(msg).font(.caption).padding(.horizontal)
+                // Make the error message selectable and wrap lines
+                 Text(msg)
+                     .font(.caption)
+                     .padding(.horizontal, 10) // Match other padding
+                     .lineLimit(nil) // Allow multiple lines
+                     .fixedSize(horizontal: false, vertical: true) // Allow vertical expansion
             }
-            Divider().padding(.vertical, 4)
-            
-            // 2. Services List
-            if stackManager.stackStatus == .running && !stackManager.services.isEmpty {
-                Menu("Services") {
-                    ForEach(stackManager.services) { service in
-                        Menu(service.Names.first ?? "Unknown") {
-                            Button("View Logs") {
-                                stackManager.streamLogs(for: service.Names.first!)
-                            }
-                            Button("View Stats") {
-                                stackManager.openStats(for: service.Names.first!)
-                            }
-                        }
-                    }
-                }
-                .menuStyle(.borderlessButton)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 2)
-                
-                Divider().padding(.vertical, 4)
+            // --- End Switch ---
 
-                // 3. Quick Links
-                MenuButton(title:"Open Jaeger UI") {
-                    NSWorkspace.shared.open(URL(string: "http://localhost:16686")!)
-                }
-                .padding(.vertical, 2)
-                MenuButton(title:"Open Grafana UI") {
-                    NSWorkspace.shared.open(URL(string: "http://localhost:3000")!)
-                }
-                .padding(.vertical, 2)
-                
-                Divider().padding(.vertical, 4)
+            Divider().padding(.vertical, 4)
+
+            // Use the extracted view
+            if stackManager.stackStatus == .running && !stackManager.services.isEmpty {
+                RunningStatusMenuView()
             }
-            // 4. Standard App Buttons
+
+            // App Buttons
             MenuButton(title: "Preferences...") {
                 NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
             }
@@ -91,6 +68,7 @@ struct MainMenuView: View {
         .padding(.vertical, 5)
     }
 }
+
 
 struct MenuButton: View {
     let title: String
@@ -123,5 +101,45 @@ struct HeaderView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
+    }
+}
+
+struct RunningStatusMenuView: View {
+    @EnvironmentObject var stackManager: StackManager
+
+    var body: some View {
+        Menu("Services") {
+            ForEach(Array(stackManager.services), id: \PodmanContainer.id) { service in
+                let serviceName = service.Names.first ?? "Unknown Service"
+                Menu(serviceName) {
+                    Button("View Logs") {
+                        stackManager.streamLogs(for: serviceName)
+                    }
+                }
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 2)
+        
+        MenuButton(title: "View All Stats") {
+            stackManager.openAllStats()
+        }
+        .padding(.vertical, 2)
+
+        Divider().padding(.vertical, 4)
+
+        // Quick Links
+        MenuButton(title:"Open Jaeger UI") {
+            NSWorkspace.shared.open(URL(string: "http://localhost:16686")!)
+        }
+        .padding(.vertical, 2)
+        MenuButton(title:"Open Grafana UI") {
+            NSWorkspace.shared.open(URL(string: "http://localhost:3000")!)
+        }
+        .padding(.vertical, 2)
+
+        Divider().padding(.vertical, 4)
     }
 }

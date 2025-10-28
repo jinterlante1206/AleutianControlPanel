@@ -29,7 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var startStopMenuItem: NSMenuItem?
     var servicesMenuItem: NSMenuItem?
     var logsMenuItem: NSMenuItem?
-    // No other static item references needed unless you want fine-grained control
+    private var settingsWindow: NSWindow?
 
     // private var cancellables = Set<AnyCancellable>() // Correct type now Combine is imported
     private var cancellables: Set<AnyCancellable> = [] // Initialize explicitly
@@ -79,9 +79,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(servicesMenuItem!)
 
         // Logs Submenu Item
-        logsMenuItem = NSMenuItem(title: "Logs & Stats", action: nil, keyEquivalent: "") // Renamed slightly
-        logsMenuItem?.submenu = NSMenu(title: "Logs & Stats") // Give submenu a title
+        logsMenuItem = NSMenuItem(title: "View Logs", action: nil, keyEquivalent: "") // Renamed slightly
+        logsMenuItem?.submenu = NSMenu(title: "View Logs") // Give submenu a title
         menu.addItem(logsMenuItem!)
+        
+        // All Stats Submenu Item
+        let allStatsItem = NSMenuItem(title: "View All Stats", action: #selector(viewAllStatsClicked), keyEquivalent: "")
+        allStatsItem.target = self
+        menu.addItem(allStatsItem)
+        
         menu.addItem(NSMenuItem.separator())
 
         // Static Links
@@ -108,17 +114,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem?.menu = menu
 
         // --- Observe StackManager for Updates ---
-        // Sink for Status changes
         stackManager.$stackStatus
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
-                print("DEBUG: Received status update: \(status)") // Log status change
+                print("DEBUG: Received status update: \(status)")
                 self?.updateIcon(for: status)
                 self?.updateMenuItems(for: status)
             }
             .store(in: &cancellables)
 
-        // Sink for Services changes
         stackManager.$services
              .receive(on: DispatchQueue.main)
              .sink { [weak self] services in
@@ -128,8 +132,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
              }
              .store(in: &cancellables)
 
-
-        // Start monitoring *after* sinks are set up
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.stackManager.startMonitoring()
         }
@@ -145,7 +147,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .starting:
             iconName = "icon-starting"
         case .running:
-            // Could add logic here to check service health for a different 'running degraded' icon
             iconName = "icon-running"
         case .error:
             iconName = "icon-error"
@@ -157,7 +158,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 button.image = image
             } else {
                  print("ERROR: Could not load icon named '\(iconName)'")
-                 // Keep previous icon or set fallback text
             }
         }
     }
@@ -201,8 +201,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .error(let msg):
              statusMenuItem?.title = "Status: Error"
              statusMenuItem?.image = NSImage(systemSymbolName: "exclamationmark.octagon.fill", accessibilityDescription: "Error")
-             // Add a dedicated error item or use tooltip
-             // For simplicity, just update the status item for now
              startStopMenuItem?.title = "Start Aleutian Stack" // Allow retry
              startStopMenuItem?.action = #selector(startStackClicked)
              startStopMenuItem?.isEnabled = true
@@ -217,18 +215,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         submenu.removeAllItems() // Clear previous items
 
         if services.isEmpty && stackManager.stackStatus == .running {
-            // Only show "No services" if the stack *should* be running but none were found
              submenu.addItem(NSMenuItem(title: "No services found", action: nil, keyEquivalent: ""))
              return
          } else if services.isEmpty {
-             // If stopped or starting, the menu item is hidden anyway, don't add anything
              return
          }
 
 
         for service in services {
             let title = service.Names.first ?? "Unknown"
-            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "") // Just the name
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
 
             // Set icon based on state AND health string
             if service.Status.contains("(healthy)") && service.State == "running" {
@@ -249,47 +245,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-     func updateLogsSubmenu(with services: [PodmanContainer]) {
+    func updateLogsSubmenu(with services: [PodmanContainer]) {
          guard let submenu = logsMenuItem?.submenu else { return }
          submenu.removeAllItems()
 
-         if services.isEmpty && stackManager.stackStatus == .running {
-             submenu.addItem(NSMenuItem(title: "No services available", action: nil, keyEquivalent: ""))
-             return
-         } else if services.isEmpty {
+         // Filter for services that are likely running or starting
+         let activeServices = services.filter { $0.State == "running" || $0.State.contains("starting") }
+
+         if activeServices.isEmpty {
+             submenu.addItem(NSMenuItem(title: "No running services", action: nil, keyEquivalent: ""))
              return
          }
 
-         for service in services {
+         for service in activeServices {
              let containerName = service.Names.first ?? "Unknown"
-            if service.State == "running" || service.State.contains("starting") {
-                let logsItem = NSMenuItem(title: "View Logs: \(containerName)", action: #selector(viewLogsClicked(_:)), keyEquivalent: "")
-                logsItem.target = self
-                logsItem.representedObject = containerName
-                submenu.addItem(logsItem)
-
-                let statsItem = NSMenuItem(title: "View Stats: \(containerName)", action: #selector(viewStatsClicked(_:)), keyEquivalent: "")
-                statsItem.target = self
-                statsItem.representedObject = containerName // <-- Store the CONTAINER name
-                submenu.addItem(statsItem)
-
-                submenu.addItem(NSMenuItem.separator())
-            }
+             let logsItem = NSMenuItem(title: "Logs: \(containerName)", action: #selector(viewLogsClicked(_:)), keyEquivalent: "")
+             logsItem.target = self
+             logsItem.representedObject = containerName
+             submenu.addItem(logsItem)
          }
-         // Remove last separator if it exists
-         if !submenu.items.isEmpty && submenu.items.last?.isSeparatorItem == true {
-             submenu.removeItem(at: submenu.items.count - 1)
-         }
-
-          // Add a message if no services are in a state to show logs/stats
-          if submenu.items.isEmpty {
-              submenu.addItem(NSMenuItem(title: "No running services", action: nil, keyEquivalent: ""))
-          }
-     }
+    }
 
 
     // --- Action Methods ---
-    // Note: Ensure these methods match the selectors used in menu item creation
     @objc func startStackClicked() {
          print("DEBUG: Start Stack button clicked.")
          stackManager.startStack()
@@ -312,16 +290,49 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let url = URL(string: "http://localhost:3000") else { return }
         NSWorkspace.shared.open(url)
     }
-    // --- End openGrafana action ---
 
-     @objc func openPreferences() {
-         print("DEBUG: Open Preferences clicked.")
-         // Use the standard way to show the Settings scene
-        
-         // Fallback for older macOS versions if needed, though Settings scene is newer
-         NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-     
-     }
+    @objc func openPreferences() {
+        print("DEBUG: Open Preferences clicked.")
+
+        // --- START NEW MANUAL WINDOW LOGIC ---
+        // 1. Check if the window already exists and bring it to front
+        if let existingWindow = settingsWindow, existingWindow.isVisible {
+            print("DEBUG: Settings window already open, bringing to front.")
+            existingWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        // 2. Create the SwiftUI Settings View
+        let settingsView = SettingsView()
+
+        // 3. Create a Hosting Controller
+        let hostingController = NSHostingController(rootView: settingsView)
+
+        // 4. Create a new NSWindow
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Aleutian Preferences"
+        window.styleMask = [.titled, .closable] // Standard window style
+        window.isReleasedWhenClosed = false // Important: Keep window in memory until we nil it out
+        window.center() // Center it on screen
+
+        // 5. Set a delegate to clear our reference when the window is closed
+        let delegate = WindowDelegate { [weak self] in
+            print("DEBUG: Settings window closed.")
+            self?.settingsWindow = nil // Clear the reference
+        }
+        window.delegate = delegate
+        objc_setAssociatedObject(window, "WindowDelegateKey", delegate, .OBJC_ASSOCIATION_RETAIN)
+
+
+        // 6. Store the reference and show the window
+        self.settingsWindow = window
+        window.makeKeyAndOrderFront(nil) // Show the window
+        print("DEBUG: Created and showed new settings window.")
+
+        // 7. Activate the app to ensure the new window gets focus
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
      @objc func viewLogsClicked(_ sender: NSMenuItem) {
          if let serviceTitle = sender.representedObject as? String {
@@ -335,22 +346,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
               }
           }
      }
+    
+    @objc func viewAllStatsClicked() {
+        print("DEBUG: View All Stats clicked.")
+        stackManager.openAllStats()
+    }
 
-     @objc func viewStatsClicked(_ sender: NSMenuItem) {
-         if let containerName = sender.representedObject as? String {
-               print("DEBUG: View Stats clicked for container '\(containerName)'.")
-               stackManager.openStats(for: containerName)
-           }
-     }
-
-     // Optional: NSMenuDelegate method
      func menuNeedsUpdate(_ menu: NSMenu) {
-         // Called just before ANY menu (including submenus) is shown.
-         // Can be useful for last-minute updates, but our Combine sinks should handle most cases.
-         // print("DEBUG: menuNeedsUpdate called for \(menu.title)")
+          print("DEBUG: menuNeedsUpdate called for \(menu.title)")
      }
 
-    // --- 5. Add Cleanup Methods ---
     func applicationWillTerminate(_ notification: Notification) {
         print("DEBUG: applicationWillTerminate - Removing status item.")
         if let item = statusItem {
@@ -368,19 +373,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         print("DEBUG: AppDelegate deinit.")
         cancellables.forEach { $0.cancel() }
     }
-    // --- End Cleanup Methods ---
 }
 
-// NOTE: Ensure your AleutianControlPanelApp.swift still includes the Settings scene:
-/*
- @main
- struct AleutianControlPanelApp: App {
-     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
-     var body: some Scene {
-         Settings {
-             SettingsView() // Make sure SettingsView exists
-         }
-     }
- }
- */
+private class WindowDelegate: NSObject, NSWindowDelegate {
+    var onClose: () -> Void
+    init(onClose: @escaping () -> Void) {
+        self.onClose = onClose
+        super.init() // Need to call super.init()
+    }
+    func windowWillClose(_ notification: Notification) {
+        onClose()
+        // Clean up the associated object to break potential retain cycles
+        if let window = notification.object as? NSWindow {
+             objc_setAssociatedObject(window, "WindowDelegateKey", nil, .OBJC_ASSOCIATION_RETAIN)
+        }
+    }
+}

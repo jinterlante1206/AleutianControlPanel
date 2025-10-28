@@ -127,25 +127,42 @@ class StackManager: ObservableObject {
         }
     }
     
-    func openStats(for containerName: String) {
-        // open a new terminal to continuously stream stats
-        let cmd = "podman stats \(containerName)"
-        
-        // tell the terminal to run the command
+    func openAllStats() {
+        // Command to show stats for all running containers and stream
+        let rawCommand = "podman stats" // No container name needed
+
+        // Escape for AppleScript
+        let escapedCommand = rawCommand
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
         let script = """
-            tell application "Terminal"
-                activate
-                do script "\(cmd)"
-            
+        tell application "Terminal"
+            activate
+            do script "\(escapedCommand)"
+        end tell
         """
+
+        print("DEBUG: Executing AppleScript for all stats:")
+        print(script)
+
         var error: NSDictionary?
         if let scriptObject = NSAppleScript(source: script) {
             scriptObject.executeAndReturnError(&error)
+        } else {
+            print("ERROR: Could not create NSAppleScript object.")
+            // Optionally update UI: self.stackStatus = .error("Failed to create AppleScript")
+            return
         }
-        if let error = error {
-            print("Applescript error \(error)")
+
+        if let executionError = error {
+            print("ERROR: AppleScript execution failed:")
+            print(executionError)
+            // Update UI with error if needed
+            // Example: self.stackStatus = .error("Stats Error: \(executionError.description)")
+        } else {
+            print("DEBUG: AppleScript for all stats executed successfully.")
         }
-        
     }
     
     func startStack() {
